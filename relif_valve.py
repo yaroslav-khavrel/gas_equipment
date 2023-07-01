@@ -1,7 +1,7 @@
 import pymysql
 import pandas as pd
 from config import host, user, pasword, db_name
-from main import relif_valve, p_relif_min, p_relif_max, p_out_nom
+from main import relif_valve, p_relif_min, p_relif_max, p_out_nom, path_chek
 
 qwery = "SELECT * from f_relif WHERE relif_model = '" + relif_valve + "'"
 
@@ -15,7 +15,7 @@ try:
         database=db_name,
         cursorclass=pymysql.cursors.DictCursor)
 
-    print("Successfully connection...")
+    # print("Successfully connection...")
 
     # вибираю вихідні дані, що необхідні для даного модуля
     with connection.cursor() as c:
@@ -68,9 +68,21 @@ for index_number in relif.index:
     else:
         relif.loc[index_number,"sp_result"] = False
 
+# визначення значення налаштування
+
+if p_relif <= relif.loc[relif["sp_result"] == True, "sp_min"].values[0]:
+    relif_set_value_result = relif.loc[relif["sp_result"] == True, "sp_min"].values[0]
+
+elif p_relif >= relif.loc[relif["sp_result"] == True, "sp_max"].values[0]:
+    relif_set_value_result = relif.loc[relif["sp_result"] == True, "sp_max"].values[0]
+else:
+    relif_set_value_result = p_relif
+
 # виводжу результат
 relif_result = relif.loc[relif["sp_result"] == True, "relif_name"].values[0]
-relif_spring_result = relif.loc[relif["sp_result"] == True, "sp_range"].values[0]
+sp_range_relif_result = relif.loc[relif["sp_result"] == True, "sp_range"].values[0]
+sp_name_relif_result = relif.loc[relif["sp_result"] == True, "sp_name"].values[0]
 
 print("ЗСК: " + relif_result)
-print("Пружина ЗСК: " + relif_spring_result)
+print("Пружина ЗСК: " + sp_range_relif_result)
+# relif.to_excel(path_chek, sheet_name="Sheet1")

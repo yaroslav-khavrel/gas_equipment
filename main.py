@@ -14,12 +14,12 @@ try:
         database=db_name,
         cursorclass=pymysql.cursors.DictCursor)
 
-    print("Successfully connection...")
+    # print("Successfully connection...")
 
     # вибираю вихідні дані, що необхідні для даного модуля
     with connection.cursor() as c:
-        c.execute("SELECT p_in_design,p_in_w_nom,p_in_w_min,p_in_s_nom,p_in_s_min,p_out_w_max,p_out_w_nom,p_out_w_min,\
-        p_out_s_max,p_out_s_nom,p_out_s_min,q_max,period,opso,upso FROM input_data ORDER BY id DESC LIMIT 1")
+        c.execute("SELECT id, p_in_design,p_in_w_nom,p_in_w_min,p_in_s_nom,p_in_s_min,p_out_w_max,p_out_w_nom,p_out_w_min,\
+        p_out_s_max,p_out_s_nom,p_out_s_min,q_max,period,opso,upso,eq_type,reduction_lines FROM input_data ORDER BY id DESC LIMIT 1")
         input_data = c.fetchall()
 
     # завантажую дані про всі регулятори fiorentini
@@ -33,7 +33,7 @@ except Exception as ex:
     print(ex)
 
 # створюю змінні по вихідних даних
-p_in_design = input_data[0]['p_in_design']
+p_in_design = input_data[0]["p_in_design"]
 p_in_w_nom = input_data[0]['p_in_w_nom']
 p_in_w_min = input_data[0]['p_in_w_min']
 p_in_s_nom = input_data[0]['p_in_s_nom']
@@ -48,6 +48,8 @@ q_max = input_data[0]['q_max']
 period = input_data[0]['period']
 opso = input_data[0]['opso']
 upso = input_data[0]['upso']
+eq_type = input_data[0]['eq_type']
+reduction_lines = input_data[0]['reduction_lines']
 
 # створюю таблицю даних для розрахунків
 fiorentini = pd.DataFrame(f_data,
@@ -68,6 +70,7 @@ if period == "winter":
     p_out_min_ncalc = p_out_s_min
 
 else:
+    period = "summer"
     p_in_nom = p_in_s_nom
     p_in_min = p_in_s_min
     p_out_nom = p_out_s_nom
@@ -226,7 +229,7 @@ for index_number in fiorentini.index.tolist():
                 database=db_name,
                 cursorclass=pymysql.cursors.DictCursor)
 
-            print("Successfully connection...")
+            # print("Successfully connection...")
 
             # вибираю вихідні дані, що необхідні для даного модуля
             with connection.cursor() as c:
@@ -301,7 +304,7 @@ try:
         database=db_name,
         cursorclass=pymysql.cursors.DictCursor)
 
-    print("Successfully connection...")
+    # print("Successfully connection...")
 
     # вибираю вихідні дані, що необхідні для даного модуля
     with connection.cursor() as c:
@@ -428,7 +431,7 @@ try:
         database=db_name,
         cursorclass=pymysql.cursors.DictCursor)
 
-    print("Successfully connection...")
+    # print("Successfully connection...")
 
     # вибираю вихідні дані, що необхідні для даного модуля
     with connection.cursor() as c:
@@ -440,7 +443,7 @@ except Exception as ex:
     print(ex)
 
 # створюю таблицю даних для подальшої роботи
-slum_shut = pd.DataFrame(slum_shut, columns= ['id','sh_model','sh_name','max_min','max_max','min_min','min_max','priorety'])
+slum_shut = pd.DataFrame(slum_shut, columns= ['id','sh_model','sh_name', 'name', 'max_min','max_max','min_min','min_max','priorety'])
 
 # рахую додаткові значення OPSO
 opso_min = 1.25 * min(p_out_min_calc,p_out_min_ncalc)
@@ -504,7 +507,7 @@ try:
         database=db_name,
         cursorclass=pymysql.cursors.DictCursor)
 
-    print("Successfully connection...")
+    # print("Successfully connection...")
 
     qwery = "SELECT * FROM f_slum_shut_spring WHERE sh_name = '" + sh_name + " MAX'"
     with connection.cursor() as c:
@@ -573,6 +576,10 @@ for index_number in sh_sp_min.index:
         sh_sp_min.loc[index_number,"sp_result"] = True
     else:
         sh_sp_min.loc[index_number,"sp_result"] = False
+if len(sh_sp_min.index) == 0:
+    sh_sp_min.loc[0, "sp_name"] = "speed valve"
+    sh_sp_min.loc[0, "sp_range"] = "-"
+    sh_sp_min.loc[0, "sp_result"] = True
 
 # дані для розрахунку скидного клапану
 relif_valve = fiorentini.loc[fiorentini["reg_result"] == True,"relif_valve"].values[0]
@@ -587,14 +594,71 @@ p_out_q_calc = fiorentini.loc[fiorentini["reg_result"] == True, "p_out_q_calc"].
 regulator_result = fiorentini.loc[fiorentini["reg_result"] == True, "regulator"].values[0]
 q_reg = fiorentini.loc[fiorentini["reg_result"] == True, "q_reg"].values[0]
 
+# результа розрахунків регулятора
+if slum_shut.loc[slum_shut["sh_result"] == True, "name"].values[0] == "":
+    regulator_sh_result = regulator_result
+else:
+    regulator_sh_result = regulator_result + " + " + slum_shut.loc[slum_shut["sh_result"] == True, "name"].values[0]
+
+spring_result = "'" + spring.loc[spring["sp_result"] == "main", "sp_range"].values[0] + "', '" + spring.loc[spring["sp_result"] == "main", "sp_name"].values[0] + "',"
+spring_names = "sp_range_main" + ", " + "sp_name_main" + ", "
+
+for spring_index in range(len(spring.loc[spring["sp_result"] == "dop", "sp_range"])):
+    spring_result += " '" + spring.loc[spring["sp_result"] == "dop", "sp_range"].values[spring_index] + "',"
+    spring_result += " '" + spring.loc[spring["sp_result"] == "dop", "sp_name"].values[spring_index] + "',"
+    spring_names += "sp_range_ad" + str(spring_index + 1) + ", " + "sp_name_ad" + str(spring_index + 1) + ", "
+
+
+if sh_sp_min.loc[0, "sp_name"] == "speed valve":
+    sh_sp_min_name_result = "speed valve"
+    sh_sp_min_range_result = ""
+    sh_set_value_min_result = 0
+
+else:
+    sh_sp_min_name_result = sh_sp_min.loc[sh_sp_min["sp_result"] == True, "sp_name"].values[0]
+    sh_sp_min_range_result = sh_sp_min.loc[sh_sp_min["sp_result"] == True, "sp_range"].values[0]
+
+    if upso <= sh_sp_min.loc[sh_sp_min["sp_result"] == True, "sp_min"].values[0]:
+        sh_set_value_min_result = sh_sp_min.loc[sh_sp_min["sp_result"] == True, "sp_min"].values[0]
+
+    elif upso >= sh_sp_min.loc[sh_sp_min["sp_result"] == True, "sp_max"].values[0]:
+        sh_set_value_min_result = sh_sp_min.loc[sh_sp_min["sp_result"] == True, "sp_max"].values[0]
+    else:
+        sh_set_value_min_result = upso
+
+sh_sp_max_range_result = sh_sp_max.loc[sh_sp_max["sp_result"] == True, "sp_range"].values[0]
+sh_sp_max_name_result = sh_sp_max.loc[sh_sp_max["sp_result"] == True, "sp_name"].values[0]
+
+if opso <= sh_sp_max.loc[sh_sp_max["sp_result"] == True, "sp_min"].values[0]:
+    sh_set_value_max_result = sh_sp_max.loc[sh_sp_max["sp_result"] == True, "sp_min"].values[0]
+
+elif opso >= sh_sp_max.loc[sh_sp_max["sp_result"] == True, "sp_max"].values[0]:
+    sh_set_value_max_result = sh_sp_max.loc[sh_sp_max["sp_result"] == True, "sp_max"].values[0]
+else:
+    sh_set_value_max_result = opso
+
+if p_out_max <= 50:
+    p_out_design = 0.05
+elif p_out_max <= 3000:
+    p_out_design = 3
+else:
+    p_out_design = 6
+
+p_in_tupe = fiorentini.loc[fiorentini["reg_result"] == True, "p_in_tupe"].values[0]
+p_out_tupe = fiorentini.loc[fiorentini["reg_result"] == True, "p_out_tupe"].values[0]
+p_in_q_calc = fiorentini.loc[fiorentini["reg_result"] == True, "p_in_q_calc"].values[0]
+p_out_q_calc = fiorentini.loc[fiorentini["reg_result"] == True, "p_out_q_calc"].values[0]
+
+
 # вивід результатів розрахунків
-print("Регулятор: " + regulator_result + " + " + \
-      slum_shut.loc[slum_shut["sh_result"] == True, "sh_name"].values[0])
+print("Регулятор: " + regulator_sh_result)
 print("Основна пружина: " + spring.loc[spring["sp_result"] == "main", "sp_range"].values[0])
 for i in range(len(spring.loc[spring["sp_result"] == "dop", "sp_range"])):
     print("Довадаткова пружина №" + str(i+1) + " : " + spring.loc[spring["sp_result"] == "dop", "sp_range"].values[i])
-print("Пружина ЗЗК мін: " + sh_sp_min.loc[sh_sp_min["sp_result"] == True, "sp_range"].values[0])
-print("Пружина ЗЗК макс: " + sh_sp_max.loc[sh_sp_max["sp_result"] == True, "sp_range"].values[0])
+print("Пружина ЗЗК мін: " + sh_sp_min_range_result)
+print("Пружина ЗЗК макс: " + sh_sp_max_range_result)
+
+# slum_shut.to_excel(path_chek, sheet_name="Sheet1")
 
 # fiorentini.to_excel(path_chek, sheet_name="Sheet1")
 

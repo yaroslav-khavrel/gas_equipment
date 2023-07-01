@@ -13,7 +13,7 @@ try:
         database=db_name,
         cursorclass=pymysql.cursors.DictCursor)
 
-    print("Successfully connection...")
+    # print("Successfully connection...")
 
     # вибираю вихідні дані, що необхідні для даного модуля
     with connection.cursor() as c:
@@ -25,7 +25,7 @@ try:
         types = c.fetchall()
 
 except Exception as ex:
-    print("Connection refused...")
+    # print("Connection refused...")
     print(ex)
 
 # створюю таблиці даних
@@ -89,9 +89,12 @@ else:
 
 # визначаю витрату для всіх ШГРП крім на НТ
 if dn_result[3] == 0:
-    dn_result[3] = round(min(1.0309278*(dn.loc[dn["dn"] == dn_result[1],"q_max_in"].values[0] + dn.loc[dn["dn"] == dn_result[2],"q_max_out"].values[0]),q_reg),0)
+    dn_result[3] = round(min(1.0309278*dn.loc[dn["dn"] == dn_result[1],"q_max_in"].values[0], 1.0309278*dn.loc[dn["dn"] == dn_result[2],"q_max_out"].values[0]),0)
 else:
     pass
+
+# визначаю витрату для ШГРП (з варахування витрати регулятора тиску)
+dn_result[3] = min(dn_result[3], q_reg)
 
 # визначаю найменування фільтів для
 if dn_result[4] == "standart":
@@ -103,7 +106,15 @@ elif dn_result[4] == "built_in_regulator":
 else:
     filter = "В комплекті з регулятором " + str(dn_result[4])
 
-вивід результатів
+# рахую швидкість газу в газопроводах
+d_in = dn.loc[dn["dn"] == dn_result[1], "din"].values[0]
+d_out = dn.loc[dn["dn"] == dn_result[2], "din"].values[0]
+
+vel_in_result = round(dn_result[3]/(3.14 * ((d_in/2000)**2)  * 3600 * (p_in_q_calc + 1.013)),1)
+vel_out_result = round(dn_result[3]/(3.14 * ((d_out/2000)**2)  * 3600 * (p_out_q_calc/1000 + 1.013)),1)
+
+
+# вивід результатів
 print("Тип ШГРП: " + dn_result[0])
 print("DN входу: " + str(dn_result[1]))
 print("DN виходу: " + str(dn_result[2]))
